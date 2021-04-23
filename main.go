@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,8 +19,10 @@ var (
 	dbuser          string
 	dbpassword      string
 	dbhost          string
+	dbport          string
 	dbname          string
 	db_cmd          string
+	threads_limit   uint64
 	table_name      string
 	maintenance_tbl string
 	cmd             string
@@ -27,29 +30,24 @@ var (
 
 func supervisor_thread(c chan int64) {
 	var conn_id int64
-	var thr_cnt int64
+	var thr_cnt uint64
 	var thr_state string
 
 	println("Starting supervisor thread")
 
 	conn_id = <-c
 
-	db, err := sql.Open("mysql", dbuser+":"+dbpassword+"@tcp("+dbhost+":3306)/"+dbname)
+	db, err := sql.Open("mysql", dbuser+":"+dbpassword+"@tcp("+dbhost+":"+dbport+")/"+dbname)
 	if err != nil {
 		panic(err.Error())
 	}
+	defer db.Close()
 	db.SetMaxOpenConns(1)
-	// select command from  information_schema.processlist where  id = 711866 ;
-
 	time.Sleep(time.Second * 5)
 
 	err = db.QueryRow("select upper(state)  from  information_schema.processlist where  id = ?", conn_id).Scan(&thr_state)
 	if err != nil {
 		panic(err.Error())
-	}
-	if thr_state != "ALTERING TABLE" {
-		fmt.Printf("After 5 seconds worker thread was in %s state, aborting\n", thr_state)
-		panic("worker thread state")
 	}
 
 	fmt.Printf("Thread state: %s\n", thr_state)
@@ -67,7 +65,7 @@ func supervisor_thread(c chan int64) {
 			panic(err.Error())
 		}
 
-		if thr_cnt > 10 {
+		if thr_cnt > threads_limit {
 			fmt.Println("ERROR: Killing worker thread due waiting proc count")
 			_, err := db.Query("KILL ?", conn_id)
 			if err != nil {
@@ -89,8 +87,6 @@ func supervisor_thread(c chan int64) {
 
 	}
 
-	defer db.Close()
-
 }
 
 func worker_thread(c chan int64) {
@@ -105,7 +101,7 @@ func worker_thread(c chan int64) {
 
 	db_space_reclaimed = 0.0
 
-	db, err := sql.Open("mysql", dbuser+":"+dbpassword+"@tcp("+dbhost+":3306)/"+dbname)
+	db, err := sql.Open("mysql", dbuser+":"+dbpassword+"@tcp("+dbhost+":"+dbport+")/"+dbname)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -190,6 +186,25 @@ func main() {
 	db_cmd = os.Getenv("DB_CMD")
 	maintenance_tbl = os.Getenv("DEFRAG_TABLES")
 	table_name = maintenance_tbl
+	dbport = "3306"
+	threads_limit = 10
+
+	if os.Getenv("DB_PORT") != "" {
+		_, err := strconv.ParseUint(os.Getenv("DB_PORT"), 10, 64)
+		if err != nil {
+			panic(err.Error())
+		}
+		dbport = os.Getenv("DB_PORT")
+
+	}
+
+	if os.Getenv("THREADS_LIMIT") != "" {
+		var err error
+		threads_limit, err = strconv.ParseUint(os.Getenv("THREADS_LIMIT"), 10, 64)
+		if err != nil {
+			panic(err.Error())
+		}
+	}
 
 	if dbuser == "" {
 		panic("Please set db user via DB_USER")
