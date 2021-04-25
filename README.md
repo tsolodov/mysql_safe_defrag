@@ -3,7 +3,7 @@
 Safe Innodb table defrag. The tool creates 2 connections to MySQL service: worker and supervisor. Supervisor monitors processlist and if it finds spike in active threads count, it will kill worker connection(Safety is first). Main purpose:  avoid wasting of time during long-running alter commands and let it go on it's own.
 
 
-It does alter with sql_bin_log = 0, I implemented it for a reason. When you do alter table with binary log enabled, the long-running alter will be replicated, and if you have complex replication topology, like M1->S1->S2->S3, you will be waiting for time_of_alter*(num_of_replicas_in_chain+1). If alters takes 2h, for this example it would be 2h*4.(approximatelly, it dedpends on multiple factors: how the ervers are loaded/HW/etc...). I prefer to run this tool in parallel for each DB server in replication chain.
+It does alter with sql_bin_log = 0, I implemented it for a reason. When you do alter table with binary log enabled, the long-running alter will be replicated, and if you have complex replication topology, like M1->S1->S2->S3, you will be waiting for time_of_alter*(num_of_replicas_in_chain+1). If alters takes 2h, for this example it would be 2h*4.(approximately, it dedpends on multiple factors: how the ervers are loaded/HW/etc...). I prefer to run this tool in parallel for each DB server in replication chain.
 
 ## Disclaimer
 
